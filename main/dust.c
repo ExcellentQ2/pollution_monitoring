@@ -125,3 +125,71 @@ static esp_err_t sps30_read_pm(float *pm1, float *pm25, float *pm4, float *pm10)
     if (err != ESP_OK) return err;
 
     // first 4 floats are mass concentration PM1.0, PM2.5, PM4.0, PM10
+    if (!extract_float_6b(&buf[0],  pm1))  return ESP_ERR_INVALID_CRC;
+    if (!extract_float_6b(&buf[6],  pm25)) return ESP_ERR_INVALID_CRC;
+    if (!extract_float_6b(&buf[12], pm4))  return ESP_ERR_INVALID_CRC;
+    if (!extract_float_6b(&buf[18], pm10)) return ESP_ERR_INVALID_CRC;
+
+    if (!isfinite(*pm1) || !isfinite(*pm25) || !isfinite(*pm4) || !isfinite(*pm10)) {
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+void app_main(void) {
+    // I2C init
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = I2C_SDA,
+        .scl_io_num = I2C_SCL,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE, // ok to enable, but you already added real pull-ups
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = I2C_FREQ_HZ
+    };
+    ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
+    ESP_ERROR_CHECK(i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0));
+
+    ESP_LOGI(TAG, "SPS30 demo starting (SEL/white must be GND for I2C).");
+    i2c_scan();
+
+    // Start measurement (retry until it works)
+    while (1) {
+        esp_err_t err = sps30_start_measurement();
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Measurement started.");
+            break;
+        }
+        ESP_LOGE(TAG, "Start measurement failed: %s (check wiring/pullups/SEL)", esp_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+
+    // Read loop
+    while (1) {
+        bool ready = false;
+        esp_err_t err = sps30_data_ready(&ready);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Data-ready read failed: %s", esp_err_to_name(err));
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+        if (!ready) {
+            vTaskDelay(pdMS_TO_TICKS(300));
+            continue;
+        }
+
+        float pm1, pm25, pm4, pm10;
+        err = sps30_read_pm(&pm1, &pm25, &pm4, &pm10);
+        if (err == ESP_OK) {
+            printf("\n=== SPS30 PM (ug/m3) ===\n");
+            printf("PM1.0 : %.2f\n", pm1);
+            printf("PM2.5 : %.2f\n", pm25);
+            printf("PM4.0 : %.2f\n", pm4);
+            printf("PM10  : %.2f\n", pm10);
+        } else {
+            ESP_LOGW(TAG, "Read PM failed: %s", esp_err_to_name(err));
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}

@@ -73,6 +73,12 @@ static esp_err_t sps30_send_cmd(uint16_t cmd) {
     return i2c_write(pkt, sizeof(pkt));
 }
 
+// ===== SPS30 Component API (Sprint 1) =====
+static esp_err_t sps30_start_measurement(void);
+static esp_err_t sps30_data_ready(bool *ready);
+static esp_err_t sps30_read_pm(float *pm1, float *pm25, float *pm4, float *pm10);
+// =========================================
+
 static esp_err_t sps30_start_measurement(void) {
     // [CMD_MSB CMD_LSB ARG_MSB ARG_LSB CRC(ARG)]
     uint8_t pkt[5];

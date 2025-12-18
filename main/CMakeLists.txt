@@ -1,3 +1,6 @@
 idf_component_register(SRCS "main.c"
-                    INCLUDE_DIRS "."
-                    PRIV_REQUIRES driver)
+                            "c02.c"
+                            "dust.c"
+                            "display.c"
+                       INCLUDE_DIRS "."
+                       REQUIRES scd30 esp_timer driver esp_lcd lvgl) # <-- Добавлено esp_lcd

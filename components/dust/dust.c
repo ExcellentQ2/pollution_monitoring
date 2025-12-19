@@ -143,7 +143,7 @@ static esp_err_t sps30_read_pm(float *pm1, float *pm25, float *pm4, float *pm10)
     return ESP_OK;
 }
 
-void app_main(void) {
+void dust_task_start(void) {
     // I2C init
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,

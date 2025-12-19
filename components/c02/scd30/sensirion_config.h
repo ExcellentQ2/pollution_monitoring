@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Sensirion AG
+ * Copyright (c) 2023, Sensirion AG
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,60 +29,32 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef SENSIRION_CONFIG_H
-#define SENSIRION_CONFIG_H
+#ifndef SENSIRION_I2C_ESP32_CONFIG_H
+#define SENSIRION_I2C_ESP32_CONFIG_H
 
-/**
- * If your platform does not provide the library stdlib.h you have to remove the
- * include and define NULL yourself (see below).
- */
-#include <stdlib.h>
+#include <i2cdev.h>
 
-/**
- * #ifndef NULL
- * #define NULL ((void *)0)
- * #endif
- */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/**
- * If your platform does not provide the library stdint.h you have to
- * define the integral types yourself (see below).
- */
-#include <stdint.h>
+typedef int esp_err_t;
 
-/**
- * Typedef section for types commonly defined in <stdint.h>
- * If your system does not provide stdint headers, please define them
- * accordingly. Please make sure to define int64_t and uint64_t.
- */
-/* typedef unsigned long long int uint64_t;
- * typedef long long int int64_t;
- * typedef long int32_t;
- * typedef unsigned long uint32_t;
- * typedef short int16_t;
- * typedef unsigned short uint16_t;
- * typedef char int8_t;
- * typedef unsigned char uint8_t;
- */
+struct esp32_i2c_config {
+    uint32_t freq;
+    uint8_t addr;
+    i2c_port_t port;
+    gpio_num_t sda;
+    gpio_num_t scl;
+    bool sda_pullup;
+    bool scl_pullup;
+};
 
-#ifndef __cplusplus
+extern esp_err_t sensirion_i2c_config_esp32(struct esp32_i2c_config* cfg);
+extern esp_err_t sensirion_i2c_esp32_ok(void);
 
-/**
- * If your platform doesn't define the bool type we define it as int. Depending
- * on your system update the definition below.
- */
-#if __STDC_VERSION__ >= 199901L
-#include <stdbool.h>
-#else
+#ifdef __cplusplus
+}
+#endif
 
-#ifndef bool
-#define bool int
-#define true 1
-#define false 0
-#endif /* bool */
-
-#endif /* __STDC_VERSION__ */
-
-#endif /* __cplusplus */
-
-#endif /* SENSIRION_CONFIG_H */
+#endif /* SENSIRION_I2C_ESP32_CONFIG_H */

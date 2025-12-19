@@ -1,3 +1,5 @@
+/* components/display/display.c */
+#include "display.h" // Обязательно подключаем свой заголовок
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/lock.h>
@@ -12,49 +14,42 @@
 #include "driver/i2c_master.h"
 #include "lvgl.h"
 
-#if CONFIG_EXAMPLE_LCD_CONTROLLER_SH1107
-#include "esp_lcd_sh1107.h"
-#else
+// Подключаем драйвер SSD1306
 #include "esp_lcd_panel_vendor.h"
-#endif
 
-static const char *TAG = "example";
+static const char *TAG = "DISPLAY";
 
-#define I2C_BUS_PORT  0
-
+// --- НАСТРОЙКИ ЭКРАНА (ВРУЧНУЮ) ---
+#define I2C_BUS_PORT                  0
 #define EXAMPLE_LCD_PIXEL_CLOCK_HZ    (400 * 1000)
 #define EXAMPLE_PIN_NUM_SDA           21
 #define EXAMPLE_PIN_NUM_SCL           22
 #define EXAMPLE_PIN_NUM_RST           -1
 #define EXAMPLE_I2C_HW_ADDR           0x3C
 
-#if CONFIG_EXAMPLE_LCD_CONTROLLER_SSD1306
-#define EXAMPLE_LCD_H_RES              128
-#define EXAMPLE_LCD_V_RES              CONFIG_EXAMPLE_SSD1306_HEIGHT
-#elif CONFIG_EXAMPLE_LCD_CONTROLLER_SH1107
-#define EXAMPLE_LCD_H_RES              64
-#define EXAMPLE_LCD_V_RES              128
-#endif
+// Жестко задаем разрешение для SSD1306
+#define EXAMPLE_LCD_H_RES             128
+#define EXAMPLE_LCD_V_RES             64
 
-#define EXAMPLE_LCD_CMD_BITS           8
-#define EXAMPLE_LCD_PARAM_BITS         8
+#define EXAMPLE_LCD_CMD_BITS          8
+#define EXAMPLE_LCD_PARAM_BITS        8
 
-#define EXAMPLE_LVGL_TICK_PERIOD_MS    5
-#define EXAMPLE_LVGL_TASK_STACK_SIZE   (4 * 1024)
-#define EXAMPLE_LVGL_TASK_PRIORITY     2
-#define EXAMPLE_LVGL_PALETTE_SIZE      8
-#define EXAMPLE_LVGL_TASK_MAX_DELAY_MS 500
-#define EXAMPLE_LVGL_TASK_MIN_DELAY_MS 1000 / CONFIG_FREERTOS_HZ
+// Настройки LVGL
+#define EXAMPLE_LVGL_TICK_PERIOD_MS     5
+#define EXAMPLE_LVGL_TASK_STACK_SIZE    (4 * 1024)
+#define EXAMPLE_LVGL_TASK_PRIORITY      2
+#define EXAMPLE_LVGL_PALETTE_SIZE       8
+#define EXAMPLE_LVGL_TASK_MAX_DELAY_MS  500
+#define EXAMPLE_LVGL_TASK_MIN_DELAY_MS  (1000 / CONFIG_FREERTOS_HZ)
 
 static uint8_t oled_buffer[EXAMPLE_LCD_H_RES * EXAMPLE_LCD_V_RES / 8];
 static _lock_t lvgl_api_lock;
 
 /*
  * -------------------------------------------------------------------------
- * UI FUNCTION
+ * UI FUNCTION (Рисуем интерфейс)
  * -------------------------------------------------------------------------
  */
-
 void example_lvgl_demo_ui(lv_display_t *disp)
 {
     float pmVal = 3.6;
@@ -67,25 +62,23 @@ void example_lvgl_demo_ui(lv_display_t *disp)
 
     static char text_buf[128];
     sprintf(text_buf,
-            "Temperature: %d C\n"
-            "Humidity: %d %%\n"
-            "CO2: %.1f ppm\n"
-            "PM : %.1f",
+            "Temp: %d C\n"
+            "Hum: %d %%\n"
+            "CO2: %.1f\n"
+            "PM: %.1f",
             Temp, Humidity, CO2, pmVal);
 
     lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_label_set_text(label, text_buf);
-
     lv_obj_set_width(label, lv_display_get_horizontal_resolution(disp));
     lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 0);
 }
 
 /*
  * -------------------------------------------------------------------------
- * LVGL CALLBACKS AND TASKS
+ * LVGL CALLBACKS
  * -------------------------------------------------------------------------
  */
-
 static bool example_notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t io_panel, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
 {
     lv_display_t *disp = (lv_display_t *)user_ctx;
@@ -96,7 +89,6 @@ static bool example_notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t io_panel, 
 static void example_lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
     esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
-
     px_map += EXAMPLE_LVGL_PALETTE_SIZE;
 
     uint16_t hor_res = lv_display_get_physical_horizontal_resolution(disp);
@@ -108,7 +100,6 @@ static void example_lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uin
     for (int y = y1; y <= y2; y++) {
         for (int x = x1; x <= x2; x++) {
             bool chroma_color = (px_map[(hor_res >> 3) * y  + (x >> 3)] & 1 << (7 - x % 8));
-
             uint8_t *buf = oled_buffer + hor_res * (y >> 3) + (x);
             if (chroma_color) {
                 (*buf) &= ~(1 << (y % 8));
@@ -117,7 +108,6 @@ static void example_lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uin
             }
         }
     }
-
     esp_lcd_panel_draw_bitmap(panel_handle, x1, y1, x2 + 1, y2 + 1, oled_buffer);
 }
 
@@ -128,14 +118,14 @@ static void example_increase_lvgl_tick(void *arg)
 
 static void example_lvgl_port_task(void *arg)
 {
-    ESP_LOGI(TAG, "Starting LVGL task");
+    ESP_LOGI(TAG, "Starting LVGL task loop");
     uint32_t time_till_next_ms = 0;
     while (1) {
         _lock_acquire(&lvgl_api_lock);
         time_till_next_ms = lv_timer_handler();
         _lock_release(&lvgl_api_lock);
 
-time_till_next_ms = MAX(time_till_next_ms, EXAMPLE_LVGL_TASK_MIN_DELAY_MS);
+        time_till_next_ms = MAX(time_till_next_ms, EXAMPLE_LVGL_TASK_MIN_DELAY_MS);
         time_till_next_ms = MIN(time_till_next_ms, EXAMPLE_LVGL_TASK_MAX_DELAY_MS);
         usleep(1000 * time_till_next_ms);
     }
@@ -143,13 +133,15 @@ time_till_next_ms = MAX(time_till_next_ms, EXAMPLE_LVGL_TASK_MIN_DELAY_MS);
 
 /*
  * -------------------------------------------------------------------------
- * MAIN APPLICATION
+ * MAIN START FUNCTION
  * -------------------------------------------------------------------------
  */
-
-void app_main(void)
+// ВНИМАНИЕ: Имя функции изменено на display_task_start
+void display_task_start(void)
 {
-    ESP_LOGI(TAG, "Initialize I2C bus");
+    ESP_LOGI(TAG, "Initialize I2C bus for Display");
+    
+    // Инициализация шины I2C
     i2c_master_bus_handle_t i2c_bus = NULL;
     i2c_master_bus_config_t bus_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
@@ -161,6 +153,7 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, &i2c_bus));
 
+    // Настройка IO панели
     ESP_LOGI(TAG, "Install panel IO");
     esp_lcd_panel_io_handle_t io_handle = NULL;
     esp_lcd_panel_io_i2c_config_t io_config = {
@@ -169,39 +162,29 @@ void app_main(void)
         .control_phase_bytes = 1,
         .lcd_cmd_bits = EXAMPLE_LCD_CMD_BITS,
         .lcd_param_bits = EXAMPLE_LCD_PARAM_BITS,
-#if CONFIG_EXAMPLE_LCD_CONTROLLER_SSD1306
-        .dc_bit_offset = 6,
-#elif CONFIG_EXAMPLE_LCD_CONTROLLER_SH1107
-        .dc_bit_offset = 0,
-        .flags = { .disable_control_phase = 1 }
-#endif
+        .dc_bit_offset = 6, // Для SSD1306
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus, &io_config, &io_handle));
 
-    ESP_LOGI(TAG, "Install OLED panel driver");
+    // Настройка драйвера SSD1306
+    ESP_LOGI(TAG, "Install SSD1306 panel driver");
     esp_lcd_panel_handle_t panel_handle = NULL;
     esp_lcd_panel_dev_config_t panel_config = {
         .bits_per_pixel = 1,
         .reset_gpio_num = EXAMPLE_PIN_NUM_RST,
     };
 
-#if CONFIG_EXAMPLE_LCD_CONTROLLER_SSD1306
     esp_lcd_panel_ssd1306_config_t ssd1306_cfg = {
         .height = EXAMPLE_LCD_V_RES,
     };
     panel_config.vendor_config = &ssd1306_cfg;
+    
+    // Создаем панель SSD1306
     ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(io_handle, &panel_config, &panel_handle));
-#elif CONFIG_EXAMPLE_LCD_CONTROLLER_SH1107
-    ESP_ERROR_CHECK(esp_lcd_new_panel_sh1107(io_handle, &panel_config, &panel_handle));
-#endif
 
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
-
-#if CONFIG_EXAMPLE_LCD_CONTROLLER_SH1107
-    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, true));
-#endif
 
     ESP_LOGI(TAG, "Initialize LVGL");
     lv_init();
@@ -236,7 +219,7 @@ void app_main(void)
     xTaskCreate(example_lvgl_port_task, "LVGL", EXAMPLE_LVGL_TASK_STACK_SIZE,
                 NULL, EXAMPLE_LVGL_TASK_PRIORITY, NULL);
 
-    ESP_LOGI(TAG, "Create UI (scrolling text)");
+    ESP_LOGI(TAG, "Create UI");
     _lock_acquire(&lvgl_api_lock);
     example_lvgl_demo_ui(display);
     _lock_release(&lvgl_api_lock);

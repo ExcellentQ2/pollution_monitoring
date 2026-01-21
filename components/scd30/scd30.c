@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "scd30_i2c.h"
+#include "scd30.h"
 #include "sensirion_common.h"
 #include "sensirion_i2c.h"
 #include "sensirion_i2c_hal.h"

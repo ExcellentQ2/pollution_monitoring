@@ -4,5 +4,8 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
+add_compile_definitions(CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=1)
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(pollution_monitoring)
+

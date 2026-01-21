@@ -1,7 +1,19 @@
+/* components/dust/dust.h */
 #ifndef DUST_H
 #define DUST_H
 
-// This function initializes I2C and starts the SPS30 measurement loop
-void dust_task_start(void);
+#include <stdbool.h>
+#include <esp_err.h>
+
+// Функции для управления сенсором
+
+// Запустить измерения
+esp_err_t sps30_start_measurement(void);
+
+// Проверить, готовы ли новые данные
+esp_err_t sps30_data_ready(bool *ready);
+
+// Прочитать данные (PM1.0, PM2.5, PM4.0, PM10.0)
+esp_err_t sps30_read_pm(float *pm1, float *pm25, float *pm4, float *pm10);
 
 #endif // DUST_H

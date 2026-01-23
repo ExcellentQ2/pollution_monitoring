@@ -22,7 +22,7 @@ static const char *TAG = "MAIN";
 // ===== MQTT TEST MODE =====
 // 1 = fake data
 // 0 = real sensor
-#define MQTT_TEST_MODE 0
+#define MQTT_TEST_MODE 1
 
 sensor_data_t global_data = {0};
 

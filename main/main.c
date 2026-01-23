@@ -48,19 +48,30 @@ void i2c_bus_recovery() {
     gpio_set_level(SDA_PIN, 1);
 }
 
-// --- JSON creator ---
-char* create_sensor_json(float co2, float temp, float hum) {
+// --- JSON creator (EXTENDED, not redesigned) ---
+char* create_sensor_json(sensor_data_t *data) {
     cJSON *root = cJSON_CreateObject();
     if (root == NULL) return NULL;
 
-    cJSON_AddStringToObject(root, "device_id", "esp32_scd30");
-    cJSON_AddNumberToObject(root, "co2_ppm", co2);
-    cJSON_AddNumberToObject(root, "temperature_c", temp);
-    cJSON_AddNumberToObject(root, "humidity_rel", hum);
+    cJSON_AddStringToObject(root, "device_id", "esp32_city_smog");
+
+    // SCD30 data
+    if (data->scd30_valid) {
+        cJSON_AddNumberToObject(root, "co2_ppm", data->co2);
+        cJSON_AddNumberToObject(root, "temperature_c", data->temperature);
+        cJSON_AddNumberToObject(root, "humidity_rel", data->humidity);
+    }
+
+    // SPS30 data
+    if (data->sps30_valid) {
+        cJSON_AddNumberToObject(root, "pm1_0", data->pm1_0);
+        cJSON_AddNumberToObject(root, "pm2_5", data->pm2_5);
+        cJSON_AddNumberToObject(root, "pm4_0", data->pm4_0);
+        cJSON_AddNumberToObject(root, "pm10",  data->pm10);
+    }
 
     char *json_string = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
-
     return json_string;
 }
 
@@ -92,32 +103,39 @@ void app_main(void)
     ESP_LOGI(TAG, "I2C Initialized.");
 
     xTaskCreate(scd30_task, "scd30_task", 4096, NULL, 5, NULL);
+    xTaskCreate(sps30_task, "sps30_task", 4096, NULL, 5, NULL);
 #endif
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(5000));
 
 #if MQTT_TEST_MODE
-        // ===== FAKE DATA =====
-        float test_co2 = 500.0;
-        float test_temp = 22.5;
-        float test_hum = 45.0;
+    // ===== FAKE DATA (MQTT TEST MODE) =====
+    sensor_data_t test = {
+        .co2 = 500.0,
+        .temperature = 22.5,
+        .humidity = 45.0,
 
-        char *payload = create_sensor_json(test_co2, test_temp, test_hum);
+        .pm1_0 = 3.2,
+        .pm2_5 = 7.8,
+        .pm4_0 = 12.4,
+        .pm10  = 18.9,
 
-        if (payload != NULL) {
-            ESP_LOGI(TAG, "JSON Payload (TEST MODE): %s", payload);
-            mqtt_publish(payload);
-            free(payload);
-        }
+        .scd30_valid = true,
+        .sps30_valid = true
+    };
+
+    char *payload = create_sensor_json(&test);
+
+    if (payload != NULL) {
+        ESP_LOGI(TAG, "JSON Payload (TEST MODE): %s", payload);
+        mqtt_publish(payload);
+        free(payload);
+    }
 
 #else
-        if (global_data.scd30_valid) {
-            char *payload = create_sensor_json(
-                global_data.co2,
-                global_data.temperature,
-                global_data.humidity
-            );
+        if (global_data.scd30_valid || global_data.sps30_valid) {
+            char *payload = create_sensor_json(&global_data);
 
             if (payload != NULL) {
                 ESP_LOGI(TAG, "JSON Payload: %s", payload);

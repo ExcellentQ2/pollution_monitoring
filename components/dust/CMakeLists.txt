@@ -1,3 +1,5 @@
-idf_component_register(SRCS 
-                       INCLUDE_DIRS "."
-                       REQUIRES )
+idf_component_register(
+    SRCS "dust.c"
+    INCLUDE_DIRS "."
+    REQUIRES driver
+)

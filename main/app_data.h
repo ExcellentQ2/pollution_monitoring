@@ -7,6 +7,7 @@ typedef struct {
     // Данные SPS30
     float pm1_0;
     float pm2_5;
+    float pm4_0;
     float pm10;
     bool sps30_valid;
 

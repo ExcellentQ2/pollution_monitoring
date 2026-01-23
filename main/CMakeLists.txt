@@ -8,9 +8,10 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES
         driver
-        cjson
+        json
         esp_wifi
         esp_event
         nvs_flash
         mqtt
+        dust
 )

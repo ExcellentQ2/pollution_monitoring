@@ -54,31 +54,31 @@ void scd30_task(void *pvParameters) {
                 vTaskDelay(pdMS_TO_TICKS(2000));
                 uint8_t rdy[3] = {0};
                 
-                // Проверяем готовность данных
+                // Check data readiness
                 if (scd30_read(0x0202, rdy, 3) == ESP_OK && rdy[1] == 1) {
                     uint8_t raw[18];
-                    // Читаем 18 байт (CO2, Temp, Hum)
+                    // Read 18 bytes (CO2, Temp, Hum)
                     if (scd30_read(0x0300, raw, 18) == ESP_OK) {
                         
-                        // Парсим CO2
+                        // Parse CO2
                         uint32_t co2_i = ((uint32_t)raw[0]<<24)|((uint32_t)raw[1]<<16)|((uint32_t)raw[3]<<8)|raw[4];
                         float co2; memcpy(&co2, &co2_i, 4);
 
-                        // Парсим Температуру
+                        // Parse Temperature
                         uint32_t temp_i = ((uint32_t)raw[6]<<24)|((uint32_t)raw[7]<<16)|((uint32_t)raw[9]<<8)|raw[10];
                         float temp; memcpy(&temp, &temp_i, 4);
 
-                        // Парсим Влажность (ЭТО МЫ ДОБАВИЛИ)
+                        // Parse Humidity
                         uint32_t hum_i = ((uint32_t)raw[12]<<24)|((uint32_t)raw[13]<<16)|((uint32_t)raw[15]<<8)|raw[16];
                         float hum; memcpy(&hum, &hum_i, 4);
 
-                        // Сохраняем ВСЁ в глобальную структуру
+                        // Save EVERYTHING to global structure
                         global_data.co2 = co2;
                         global_data.temperature = temp;
-                        global_data.humidity = hum;       // <--- Сохраняем влажность
+                        global_data.humidity = hum;       // <--- Save humidity
                         global_data.scd30_valid = true;
                         
-                        // Лог для проверки
+                        // Log for verification
                         ESP_LOGI(TAG, "Read: CO2=%.0f, T=%.2f, Hum=%.1f%%", co2, temp, hum);
                     }
                 }

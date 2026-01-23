@@ -1,3 +1,10 @@
 idf_component_register(SRCS "display.c"
-                       INCLUDE_DIRS "."
-                       REQUIRES driver esp_timer lvgl esp_lcd)
+                       PRIV_REQUIRES spi_flash
+                       REQUIRES 
+                       esp_lcd
+                       esp_timer
+                       driver
+                       esp_wifi
+                       nvs_flash
+                       mqtt
+                       INCLUDE_DIRS ".")

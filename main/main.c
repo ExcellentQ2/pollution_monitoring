@@ -10,6 +10,7 @@
 #include "app_data.h"
 #include "wifi.h"
 #include "mqtt.h"
+#include "oled_task.h"
 
 static const char *TAG = "MAIN";
 
@@ -17,7 +18,7 @@ static const char *TAG = "MAIN";
 #define SDA_PIN 21
 #define SCL_PIN 22
 #define I2C_PORT 0
-#define I2C_FREQ 20000 
+#define I2C_FREQ 100000
 
 // ===== MQTT TEST MODE =====
 // 1 = fake data
@@ -104,6 +105,7 @@ void app_main(void)
 
     xTaskCreate(scd30_task, "scd30_task", 4096, NULL, 5, NULL);
     xTaskCreate(sps30_task, "sps30_task", 4096, NULL, 5, NULL);
+    oled_task_start();
 #endif
 
     while (1) {

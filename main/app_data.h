@@ -2,6 +2,9 @@
 #define APP_DATA_H
 
 #include <stdbool.h>
+#include "freertos/semphr.h"
+
+extern SemaphoreHandle_t i2c_mutex;
 
 typedef struct {
     // Данные SPS30

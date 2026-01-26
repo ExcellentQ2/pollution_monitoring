@@ -1,161 +1,198 @@
-#include <stdio.h>
-#include <string.h>
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
 #include "driver/i2c.h"
 #include "esp_log.h"
+#include "string.h"
 
 #include "app_data.h"
 
-/* ================= CONFIG ================= */
+#define OLED_ADDR  0x3C
+#define OLED_WIDTH 128
+#define OLED_HEIGHT 64
 
-#define TAG "OLED"
+#define I2C_PORT I2C_NUM_0
 
-#define OLED_ADDR      0x3C
+static const char *TAG = "OLED";
 
-#define I2C_PORT       I2C_NUM_0
-#define SDA_PIN        21
-#define SCL_PIN        22
-#define I2C_FREQ       400000
+/* ================= FONT 5x7 ================= */
 
-/* ========================================= */
+static const uint8_t font5x7[][5] = {
+    {0x00,0x00,0x00,0x00,0x00}, // space 32
+    {0x00,0x00,0x5F,0x00,0x00}, // !
+    {0x00,0x07,0x00,0x07,0x00}, // "
+    {0x14,0x7F,0x14,0x7F,0x14}, // #
+    {0x24,0x2A,0x7F,0x2A,0x12}, // $
+    {0x23,0x13,0x08,0x64,0x62}, // %
+    {0x36,0x49,0x55,0x22,0x50}, // &
+    {0x00,0x05,0x03,0x00,0x00}, // '
+};
 
-extern sensor_data_t global_data;
+/* Only printable ASCII 32–127 needed */
+#define FONT_OFFSET 32
 
+/* ================= LOW LEVEL ================= */
 
-/* ---------- Low-level I2C ---------- */
-
-static esp_err_t oled_write_cmd(uint8_t cmd)
+static void oled_cmd(uint8_t cmd)
 {
-    uint8_t buf[2] = {0x00, cmd};
+    uint8_t data[2] = {0x00, cmd};
 
-    i2c_cmd_handle_t handle = i2c_cmd_link_create();
-
-    i2c_master_start(handle);
-    i2c_master_write_byte(handle, (OLED_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write(handle, buf, 2, true);
-    i2c_master_stop(handle);
-
-    esp_err_t ret = i2c_master_cmd_begin(
-        I2C_PORT, handle, pdMS_TO_TICKS(100));
-
-    i2c_cmd_link_delete(handle);
-
-    return ret;
+    i2c_master_write_to_device(
+        I2C_PORT, OLED_ADDR,
+        data, 2,
+        100 / portTICK_PERIOD_MS
+    );
 }
 
-
-static esp_err_t oled_write_data(uint8_t *data, size_t len)
+static void oled_data(uint8_t *data, size_t len)
 {
-    uint8_t ctrl = 0x40;
+    uint8_t buf[len + 1];
+    buf[0] = 0x40;
 
-    i2c_cmd_handle_t handle = i2c_cmd_link_create();
+    memcpy(&buf[1], data, len);
 
-    i2c_master_start(handle);
-    i2c_master_write_byte(handle, (OLED_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(handle, ctrl, true);
-    i2c_master_write(handle, data, len, true);
-    i2c_master_stop(handle);
-
-    esp_err_t ret = i2c_master_cmd_begin(
-        I2C_PORT, handle, pdMS_TO_TICKS(100));
-
-    i2c_cmd_link_delete(handle);
-
-    return ret;
+    i2c_master_write_to_device(
+        I2C_PORT, OLED_ADDR,
+        buf, len + 1,
+        100 / portTICK_PERIOD_MS
+    );
 }
 
+/* ================= CORE ================= */
 
-/* ---------- SSD1306 Init ---------- */
-
-static void oled_init(void)
+static void oled_set_cursor(uint8_t page, uint8_t col)
 {
-    oled_write_cmd(0xAE);
-    oled_write_cmd(0x20);
-    oled_write_cmd(0x00);
-    oled_write_cmd(0xB0);
-    oled_write_cmd(0xC8);
-    oled_write_cmd(0x00);
-    oled_write_cmd(0x10);
-    oled_write_cmd(0x40);
-    oled_write_cmd(0x81);
-    oled_write_cmd(0xFF);
-    oled_write_cmd(0xA1);
-    oled_write_cmd(0xA6);
-    oled_write_cmd(0xA8);
-    oled_write_cmd(0x3F);
-    oled_write_cmd(0xA4);
-    oled_write_cmd(0xD3);
-    oled_write_cmd(0x00);
-    oled_write_cmd(0xD5);
-    oled_write_cmd(0xF0);
-    oled_write_cmd(0xD9);
-    oled_write_cmd(0x22);
-    oled_write_cmd(0xDA);
-    oled_write_cmd(0x12);
-    oled_write_cmd(0xDB);
-    oled_write_cmd(0x20);
-    oled_write_cmd(0x8D);
-    oled_write_cmd(0x14);
-    oled_write_cmd(0xAF);
-
-    ESP_LOGI(TAG, "SSD1306 initialized");
+    oled_cmd(0xB0 | page);
+    oled_cmd(0x00 | (col & 0x0F));
+    oled_cmd(0x10 | (col >> 4));
 }
-
-
-/* ---------- Clear ---------- */
 
 static void oled_clear(void)
 {
-    uint8_t buf[128];
-    memset(buf, 0, sizeof(buf));
+    uint8_t zero[128];
+    memset(zero, 0, sizeof(zero));
 
-    for (int page = 0; page < 8; page++) {
+    for (int i = 0; i < 8; i++) {
 
-        oled_write_cmd(0xB0 + page);
-        oled_write_cmd(0x00);
-        oled_write_cmd(0x10);
-
-        oled_write_data(buf, 128);
+        oled_set_cursor(i, 0);
+        oled_data(zero, 128);
     }
 }
 
+static void oled_char(char c)
+{
+    if (c < 32 || c > 127) c = '?';
 
-/* ---------- Task ---------- */
+    uint8_t buf[6];
+
+    memcpy(buf, font5x7[c - FONT_OFFSET], 5);
+    buf[5] = 0x00;
+
+    oled_data(buf, 6);
+}
+
+static void oled_string(const char *s)
+{
+    while (*s) {
+        oled_char(*s++);
+    }
+}
+
+/* ================= INIT ================= */
+
+static void oled_init(void)
+{
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    oled_cmd(0xAE);
+    oled_cmd(0x20); oled_cmd(0x00);
+    oled_cmd(0xB0);
+    oled_cmd(0xC8);
+    oled_cmd(0x00);
+    oled_cmd(0x10);
+    oled_cmd(0x40);
+    oled_cmd(0x81); oled_cmd(0xFF);
+    oled_cmd(0xA1);
+    oled_cmd(0xA6);
+    oled_cmd(0xA8); oled_cmd(0x3F);
+    oled_cmd(0xA4);
+    oled_cmd(0xD3); oled_cmd(0x00);
+    oled_cmd(0xD5); oled_cmd(0xF0);
+    oled_cmd(0xD9); oled_cmd(0x22);
+    oled_cmd(0xDA); oled_cmd(0x12);
+    oled_cmd(0xDB); oled_cmd(0x20);
+    oled_cmd(0x8D); oled_cmd(0x14);
+    oled_cmd(0xAF);
+
+    ESP_LOGI(TAG, "OLED initialized");
+}
+
+/* ================= TASK ================= */
 
 static void oled_task(void *arg)
 {
+    char buf[64];
+
+    oled_init();
     oled_clear();
 
     while (1) {
 
-        ESP_LOGI(TAG,
-            "T=%.1f H=%.1f CO2=%.0f PM2.5=%.1f",
-            global_data.temperature,
-            global_data.humidity,
-            global_data.co2,
-            global_data.pm2_5
-        );
+        oled_clear();
+
+        /* Line 1 */
+        oled_set_cursor(0, 0);
+
+        if (global_data.scd30_valid) {
+
+            snprintf(buf, sizeof(buf),
+                     "T:%.1f H:%.1f",
+                     global_data.temperature,
+                     global_data.humidity);
+
+        } else {
+            strcpy(buf, "SCD30: ---");
+        }
+
+        oled_string(buf);
+
+
+        /* Line 2 */
+        oled_set_cursor(2, 0);
+
+        if (global_data.scd30_valid) {
+
+            snprintf(buf, sizeof(buf),
+                     "CO2: %.0f ppm",
+                     global_data.co2);
+
+        } else {
+            strcpy(buf, "CO2: ---");
+        }
+
+        oled_string(buf);
+
+
+        /* Line 3 */
+        oled_set_cursor(4, 0);
+
+        if (global_data.sps30_valid) {
+
+            snprintf(buf, sizeof(buf),
+                     "PM2.5: %.1f",
+                     global_data.pm2_5);
+
+        } else {
+            strcpy(buf, "PM: ---");
+        }
+
+        oled_string(buf);
+
 
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
 
-
-/* ---------- Start ---------- */
-
 void oled_task_start(void)
 {
-    oled_init();
-
-    xTaskCreate(
-        oled_task,
-        "oled_task",
-        4096,
-        NULL,
-        4,
-        NULL
-    );
+    xTaskCreate(oled_task, "oled", 4096, NULL, 4, NULL);
 }

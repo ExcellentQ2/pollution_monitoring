@@ -5,6 +5,7 @@ idf_component_register(
         "mqtt.c"
         "scd30_task.c"
         "sps30_task.c"
+        "oled_task.c"
     INCLUDE_DIRS "."
     REQUIRES
         driver
@@ -14,4 +15,5 @@ idf_component_register(
         nvs_flash
         mqtt
         dust
+        esp_lcd
 )
